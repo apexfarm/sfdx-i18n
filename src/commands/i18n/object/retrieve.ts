@@ -1,10 +1,9 @@
-import { flags, SfdxCommand, SfdxResult } from '@salesforce/command';
-import { Messages, SfdxError, Connection, DefaultUserFields } from '@salesforce/core';
+import { flags, SfdxCommand } from '@salesforce/command';
+import { Messages, SfdxError, Connection } from '@salesforce/core';
 import { AnyJson } from '@salesforce/ts-types';
-import { setFlagsFromString } from 'v8';
 import { MetadataInfo } from 'jsforce';
-import * as XLSX from 'xlsx';
 import * as path from 'path';
+import * as XLSX from 'xlsx';
 
 // Initialize Messages with the current plugin directory
 Messages.importMessagesDirectory(__dirname);
@@ -32,28 +31,6 @@ export default class Org extends SfdxCommand {
     `
   ];
 
-  public static result: SfdxResult = {
-    tableColumnData: {
-      columns: [
-        { key: 'component', label: 'Component' },
-        { key: 'fieldName', label: 'Field Name' },
-        { key: 'label', label: 'Label' }
-      ]
-    },
-    display() {
-      if (Array.isArray(this.data)) {
-        this.data.forEach((table) => {
-          const { sheet, rows } = table as {sheet: string, rows: AnyJson[]};
-          if (rows) {
-            this.ux.log();
-            this.ux.log(`==========${sheet}==========`);
-            this.ux.table(rows, this.tableColumnData);
-          }
-        });
-      }
-    }
-  };
-
   public static args = [];
 
   protected static flagsConfig = {
@@ -76,7 +53,7 @@ export default class Org extends SfdxCommand {
   protected static requiresProject = false;
 
   public async run(): Promise<AnyJson> {
-    const { objects, locales, outputdir, label, description} = this.flags;
+    const { objects, locales, outputdir } = this.flags;
 
     const conn = this.org.getConnection();
 
@@ -84,10 +61,10 @@ export default class Org extends SfdxCommand {
       this.readObjectTranslations(conn, objects, locales),
       this.readObjectDefinitions(conn, objects)
     ])
-    .then(([[locales, objectTranslations], [customObjects, customFields]]) => {
+    .then(([[sfLocales, objectTranslations], [customObjects, customFields]]) => {
       const translationMap = this.prepareTranslationMap(objectTranslations);
-      const customFieldMap = this.prepareCustomFieldMap(customFields, customObjects);
-      return this.prepareResult(customObjects, customFieldMap, translationMap, locales);
+      const customFieldMap = this.prepareCustomFieldMap(customFields as AnyJson[], customObjects as AnyJson[]);
+      return this.prepareResult(customObjects, customFieldMap, translationMap, sfLocales);
     })
     .catch(error => {
       console.log(error);
@@ -98,7 +75,7 @@ export default class Org extends SfdxCommand {
       throw new SfdxError(messages.getMessage('errorNoOrgResults', [this.org.getOrgId()]));
     }
 
-    this.writeExcel(result.map(({sheet, header, rows}) => {
+    this.writeExcel((result as any).map(({sheet, header, rows}) => {
       return {
         sheet,
         header,
@@ -169,7 +146,7 @@ export default class Org extends SfdxCommand {
 
           switch (type) {
             case 'Picklist': {
-              let { picklistValues } = customField;
+              const { picklistValues } = customField;
               if (!picklistValues) {
                 break;
               }
@@ -343,9 +320,6 @@ export default class Org extends SfdxCommand {
           translations = translations.filter(({ fullName: locale }) => locales.includes(locale));
         }
         locales = translations.map(({ fullName: locale }) => locale);
-        locales.forEach((locale) => {
-          this.result.tableColumnData.columns.push({ key: locale, label: `Translation (${locale})` });
-        });
 
         return locales
           .map(locale => objects.map(objectName => `${objectName}-${locale}`))
