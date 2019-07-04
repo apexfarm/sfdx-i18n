@@ -1,8 +1,6 @@
 import { flags, SfdxCommand, SfdxResult } from '@salesforce/command';
 import { Messages, SfdxError, Connection } from '@salesforce/core';
-import { AnyJson } from '@salesforce/ts-types';
-import { MetadataInfo, SaveResult } from 'jsforce';
-import * as path from 'path';
+import { SaveResult } from 'jsforce';
 import * as XLSX from 'xlsx';
 
 // Initialize Messages with the current plugin directory
