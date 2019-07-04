@@ -1,0 +1,11 @@
+{
+  "commandDescription": "retrieve translations in .xlsx format",
+  "objectsFlagDescription": "a list of sObject API names",
+  "localesFlagDescription": "a list of supported locales",
+  "fileFlagDescription": "the .xlsx file",
+  "labelFlagDescription": "require .xlsx file to include field labels",
+  "descriptionFlagDescription": "require .xlsx file to include field descriptions",
+  "helptextFlagDescription": "require .xlsx file to include field help texts",
+  "picklistFlagDescription": "require .xlsx file to include picklist values",
+  "errorNoOrgResults": "No results found for the org '%s'."
+}

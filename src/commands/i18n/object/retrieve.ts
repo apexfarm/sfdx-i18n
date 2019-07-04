@@ -61,10 +61,10 @@ export default class Org extends SfdxCommand {
       this.readObjectTranslations(conn, objects, locales),
       this.readObjectDefinitions(conn, objects)
     ])
-    .then(([[sfLocales, objectTranslations], [customObjects, customFields]]) => {
+    .then(([[sfLocales, objectTranslations], customObjects]) => {
       const translationMap = this.prepareTranslationMap(objectTranslations);
-      const customFieldMap = this.prepareCustomFieldMap(customFields as AnyJson[], customObjects as AnyJson[]);
-      return this.prepareResult(customObjects, customFieldMap, translationMap, sfLocales);
+      // const customFieldMap = this.prepareCustomFieldMap(customObjects);
+      return this.prepareResult(customObjects, translationMap, sfLocales);
     })
     .catch(error => {
       console.log(error);
@@ -110,16 +110,18 @@ export default class Org extends SfdxCommand {
     XLSX.writeFile(wb, path.join(outputdir, 'i18n.xlsx'));
   }
 
-  private async prepareResult(customObjects, customFieldMap, translationMap, locales): Promise<AnyJson[]> {
+  private async prepareResult(customObjects, translationMap, locales): Promise<AnyJson[]> {
     return customObjects.map(customObject => {
       const customFieldTranslations = [];
       const picklistTranslations = [];
 
       customObject.fields
         .filter(field => field.fullName.endsWith('__c'))
-        .forEach(field => {
-          const fieldName = `${customObject.fullName}.${field.fullName}`;
-          const customField = customFieldMap[customObject.fullName][fieldName];
+        .forEach(customField => {
+          const fieldName = `${customObject.fullName}.${customField.fullName}`;
+          const xlsFieldName = fieldName.endsWith('__c')
+            ? fieldName.substring(0, fieldName.lastIndexOf('__c'))
+            : fieldName;
           const { description, type } = customField;
           const translations = locales.map(locale => {
             return {
@@ -127,14 +129,10 @@ export default class Org extends SfdxCommand {
               translation: translationMap[customObject.fullName][locale][fieldName]};
           });
 
-          const xlsFieldName = fieldName.endsWith('__c')
-            ? fieldName.substring(0, fieldName.lastIndexOf('__c'))
-            : fieldName;
-
           customFieldTranslations.push({
             component: 'CustomField',
             suffix: 'FieldLabel',
-            fieldName: field.fullName,
+            fieldName: customField.fullName,
             key: `CustomField.${xlsFieldName}.FieldLabel`,
             label: customField.label,
             ...translations.reduce((state, {locale, translation}) => {
@@ -145,10 +143,18 @@ export default class Org extends SfdxCommand {
           });
 
           switch (type) {
+            case 'MultiselectPicklist':
             case 'Picklist': {
-              const { picklistValues } = customField;
+              let picklistValues =
+                customField.valueSet ?
+                customField.valueSet.valueSetDefinition ?
+                customField.valueSet.valueSetDefinition.value : null : null;
               if (!picklistValues) {
                 break;
+              }
+
+              if (!Array.isArray(picklistValues)) {
+                picklistValues = [picklistValues];
               }
 
               const picklistValueMap = this.preparePicklistMap(picklistValues, locales, translations);
@@ -156,7 +162,7 @@ export default class Org extends SfdxCommand {
                 picklistTranslations.push({
                   component: 'PicklistValue',
                   suffix: fullName,
-                  fieldName: field.fullName,
+                  fieldName: customField.fullName,
                   key: `PicklistValue.${xlsFieldName}.${label}`,
                   label,
                   ...picklistValueMap[label]
@@ -168,7 +174,7 @@ export default class Org extends SfdxCommand {
               customFieldTranslations.push({
                 component: 'CustomField',
                 suffix: 'RelatedListLabel',
-                fieldName: field.fullName,
+                fieldName: customField.fullName,
                 key: `CustomField.${xlsFieldName}.RelatedListLabel`,
                 label: customField.relationshipLabel,
                 ...translations.reduce((state, {locale, translation}) => {
@@ -244,69 +250,29 @@ export default class Org extends SfdxCommand {
       }, {});
   }
 
-  private prepareCustomFieldMap(customFields: any[], customObjects: any[]) {
-    const customFieldMap = customFields.reduce((state, { fullName, label, type, description }) => {
-      const objectName = fullName.substring(0, fullName.indexOf('.'));
-      if (!state[objectName]) {
-        state[objectName] = {};
-      }
-      state[objectName][fullName] = { fullName, label, type, description };
-      return state;
-    }, {});
-    customObjects.forEach((customObject => {
-      const objectName = customObject.fullName;
-      customObject.fields
-        .filter(field => field.type === 'Picklist' && field.valueSet)
-        .forEach(field => {
-          let picklistValues = [];
-          if (field.valueSet && field.valueSet.valueSetDefinition) {
-            const { value } = field.valueSet.valueSetDefinition;
-            if (!Array.isArray(value)) {
-              picklistValues = [value];
-            } else {
-              picklistValues = value;
-            }
-          }
-          customFieldMap[objectName][`${objectName}.${field.fullName}`].picklistValues
-            = picklistValues;
-        });
-    }));
-    return customFieldMap;
-  }
-
   private async readObjectDefinitions(conn: Connection, objects: string[]) {
-    return conn.metadata.read('CustomObject', objects)
-      .then(customObjects => {
-        if (!Array.isArray(customObjects)) {
-          customObjects = [customObjects];
+    return Promise.all(objects
+      .reduce((state, objectName, index) => {
+        if (index % 10 === 0) {
+          state.push([]);
         }
-        return [customObjects, customObjects
-          .map(customObject => {
-            const { fullName: objectName, fields } = customObject as CustomObjectMetadataInfo;
-            return fields.map(field => `${objectName}.${field.fullName}`);
-          })
-          .reduce((state, fieldNames) => state.concat(fieldNames), [])
-          .reduce((state, fieldName, index) => {
-            if (index % 10 === 0) {
-              state.push([]);
-            }
-            state[state.length - 1].push(fieldName);
-            return state;
-          }, [])];
-      })
-      .then(([customObjects, customFields]) => Promise.all([
-        customObjects,
-        Promise.all(customFields.map(each10Field => conn.metadata.read('CustomField', each10Field)))
-      ]))
-      .then(([customObjects, customFields]) => [
-        customObjects,
-        customFields.reduce((state: MetadataInfo[], each10Field: MetadataInfo | MetadataInfo[]): MetadataInfo[] => {
-          if (!Array.isArray(each10Field)) {
-            each10Field = [each10Field];
-          }
-          return state.concat(each10Field);
-        }, [])
-      ]);
+        state[state.length - 1].push(objectName);
+        return state;
+      }, [])
+      .map(each10object => conn.metadata.read('CustomObject', each10object))
+    )
+    .then((each10objects: CustomObjectMetadataInfo[][]) => {
+      if (!Array.isArray(each10objects)) {
+        each10objects = [each10objects];
+      }
+
+      return each10objects.reduce((state, each10Object) => {
+        if (!Array.isArray(each10Object)) {
+          each10Object = [each10Object];
+        }
+        return state.concat(each10Object);
+      }, []);
+    });
   }
 
   private async readObjectTranslations(conn: Connection, objects: string[], locales: string[]) {
