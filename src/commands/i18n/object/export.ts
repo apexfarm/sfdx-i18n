@@ -1,33 +1,25 @@
 import { flags, SfdxCommand } from '@salesforce/command';
 import { Messages, SfdxError, Connection } from '@salesforce/core';
 import { AnyJson } from '@salesforce/ts-types';
-import { MetadataInfo } from 'jsforce';
 import * as path from 'path';
 import * as XLSX from 'xlsx';
+import {
+  CustomObjectMetadataInfo,
+  CustomObjectTranslationMetadataInfo
+} from '../../../common/types';
+import { MetadataInfo } from 'jsforce';
 
-// Initialize Messages with the current plugin directory
 Messages.importMessagesDirectory(__dirname);
-
-// Load the specific messages for this file. Messages from @salesforce/command, @salesforce/core,
-// or any library that is using the messages framework can also be loaded this way.
-const messages = Messages.loadMessages('sfdx-i18n', 'retrieve');
-
-interface CustomObjectMetadataInfo extends MetadataInfo {
-  fields: MetadataInfo[];
-}
-
-interface CustomObjectTranslationMetadataInfo extends MetadataInfo {
-  fields: { name: string } | Array<{ name: string }>;
-}
+const messages = Messages.loadMessages('sfdx-i18n', 'export');
 
 export default class Org extends SfdxCommand {
 
   public static description = messages.getMessage('commandDescription');
 
   public static examples = [
-    `$ sfdx i18n:object:retrieve --objects Account,Contact --locales en_US,es_MX
+    `$ sfdx i18n:object:export --objects Account,Contact --targetusername your.username@email.com
     `,
-    `$ sfdx i18n:object:retrieve --objects Account,Contact --locales en_US,es_MX --label --description --helptext --picklist
+    `$ sfdx i18n:object:export --objects Account,Contact --locales en_US,es_MX --directory ./path/to/folder/ --targetusername your.username@email.com
     `
   ];
 
@@ -36,25 +28,17 @@ export default class Org extends SfdxCommand {
   protected static flagsConfig = {
     objects: flags.array({char: 'o', description: messages.getMessage('objectsFlagDescription')}),
     locales: flags.array({char: 'l', description: messages.getMessage('localesFlagDescription')}),
-    outputdir: flags.directory({char: 'd', description: messages.getMessage('outputdirFlagDescription')}),
-    label: flags.boolean({description: messages.getMessage('labelFlagDescription')}),
-    description: flags.boolean({description: messages.getMessage('descriptionFlagDescription')}),
-    helptext: flags.boolean({description: messages.getMessage('helptextFlagDescription')}),
-    picklist: flags.boolean({description: messages.getMessage('picklistFlagDescription')})
+    directory: flags.directory({char: 'd', description: messages.getMessage('directoryFlagDescription')})
   };
 
-  // Comment this out if your command does not require an org username
   protected static requiresUsername = true;
-
-  // Comment this out if your command does not support a hub org username
   protected static supportsDevhubUsername = true;
-
-  // Set this to true if your command requires a project workspace; 'requiresProject' is false by default
   protected static requiresProject = false;
 
   public async run(): Promise<AnyJson> {
-    const { objects, locales, outputdir } = this.flags;
+    this.ux.startSpinner(messages.getMessage('startSpinnerDescription'));
 
+    const { objects, locales, directory } = this.flags;
     const conn = this.org.getConnection();
 
     const result = await Promise.all([
@@ -62,11 +46,11 @@ export default class Org extends SfdxCommand {
       this.readObjectDefinitions(conn, objects)
     ])
     .then(([[sfLocales, objectTranslations], customObjects]) => {
-      const translationMap = this.prepareTranslationMap(objectTranslations);
-      // const customFieldMap = this.prepareCustomFieldMap(customObjects);
+      const translationMap = this.prepareTranslationMap(objectTranslations as CustomObjectTranslationMetadataInfo[]);
       return this.prepareResult(customObjects, translationMap, sfLocales);
     })
     .catch(error => {
+      this.ux.stopSpinner();
       console.log(error);
       throw new SfdxError(error);
     });
@@ -87,12 +71,13 @@ export default class Org extends SfdxCommand {
           return newRow;
         })
       };
-    }), outputdir);
+    }), directory);
 
+    this.ux.stopSpinner();
     return result;
   }
 
-  private  writeExcel(result, outputdir) {
+  private  writeExcel(result, directory) {
     const wb = XLSX.utils.book_new();
 
     result.forEach(({sheet, header, rows}) => {
@@ -103,11 +88,11 @@ export default class Org extends SfdxCommand {
       );
     });
 
-    if (!outputdir) {
-      outputdir = './';
+    if (!directory) {
+      directory = './';
     }
 
-    XLSX.writeFile(wb, path.join(outputdir, 'i18n.xlsx'));
+    XLSX.writeFile(wb, path.join(directory, 'i18n.xlsx'));
   }
 
   private async prepareResult(customObjects, translationMap, locales): Promise<AnyJson[]> {
@@ -224,8 +209,8 @@ export default class Org extends SfdxCommand {
     }, {});
   }
 
-  private prepareTranslationMap(objectTranslations: string[] | MetadataInfo[]) {
-    return (objectTranslations as CustomObjectTranslationMetadataInfo[])
+  private prepareTranslationMap(objectTranslations: CustomObjectTranslationMetadataInfo[]) {
+    return (objectTranslations)
       .map(({ fullName, fields }) => {
         const objectName = fullName.substring(0, fullName.indexOf('-'));
         const lang = fullName.substring(fullName.indexOf('-') + 1);
@@ -287,11 +272,27 @@ export default class Org extends SfdxCommand {
         }
         locales = translations.map(({ fullName: locale }) => locale);
 
-        return locales
+        return Promise.all(locales
           .map(locale => objects.map(objectName => `${objectName}-${locale}`))
-          .reduce((state, translationNames) => state.concat(translationNames), []);
+          .reduce((state, translationNames) => state.concat(translationNames), [])
+          .reduce((state, translationName, index) => {
+            if (index % 10 === 0) {
+              state.push([]);
+            }
+            state[state.length - 1].push(translationName);
+            return state;
+          }, [])
+          .map(each10translations => conn.metadata.read('CustomObjectTranslation', each10translations))
+        );
       })
-      .then(translationNames => conn.metadata.read('CustomObjectTranslation', translationNames))
+      .then(each10translations => each10translations.reduce((state: MetadataInfo[], each10translation) => {
+        if (Array.isArray(each10translation)) {
+          return state.concat(each10translation);
+        } else {
+          state.push(each10translation);
+          return state;
+        }
+      }, []))
       .then(objectTranslations => {
         if (!Array.isArray(objectTranslations)) {
           objectTranslations = [objectTranslations];

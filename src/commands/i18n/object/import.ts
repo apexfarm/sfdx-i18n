@@ -3,21 +3,17 @@ import { Messages, SfdxError, Connection } from '@salesforce/core';
 import { SaveResult } from 'jsforce';
 import * as XLSX from 'xlsx';
 
-// Initialize Messages with the current plugin directory
 Messages.importMessagesDirectory(__dirname);
-
-// Load the specific messages for this file. Messages from @salesforce/command, @salesforce/core,
-// or any library that is using the messages framework can also be loaded this way.
-const messages = Messages.loadMessages('sfdx-i18n', 'deploy');
+const messages = Messages.loadMessages('sfdx-i18n', 'import');
 
 export default class Org extends SfdxCommand {
 
   public static description = messages.getMessage('commandDescription');
 
   public static examples = [
-    `$ sfdx i18n:object:deploy --objects Account,Contact --locales en_US,es_MX
+    `$ sfdx i18n:object:import --file ./path/to/i18n.xlsx --targetusername your@email.com
     `,
-    `$ sfdx i18n:object:deploy --objects Account,Contact --locales en_US,es_MX --label --description --helptext --picklist
+    `$ sfdx i18n:object:import --objects Account,Contact --locales en_US,es_MX --file ./path/to/i18n.xlsx --targetusername your@email.com
     `
   ];
 
@@ -44,32 +40,24 @@ export default class Org extends SfdxCommand {
             : `${errors.statusCode}: ${errors.message}`
         })), this.tableColumnData);
       }
-      this.ux.log(`\nSuccessfully deployed ${success} fields.\n`);
+      this.ux.log(`\nSuccessfully imported ${success} fields.\n`);
     }
 };
 
   protected static flagsConfig = {
     objects: flags.array({char: 'o', description: messages.getMessage('objectsFlagDescription')}),
     locales: flags.array({char: 'l', description: messages.getMessage('localesFlagDescription')}),
-    file: flags.directory({char: 'f', description: messages.getMessage('fileFlagDescription')}),
-    label: flags.boolean({description: messages.getMessage('labelFlagDescription')}),
-    description: flags.boolean({description: messages.getMessage('descriptionFlagDescription')}),
-    helptext: flags.boolean({description: messages.getMessage('helptextFlagDescription')}),
-    picklist: flags.boolean({description: messages.getMessage('picklistFlagDescription')})
+    file: flags.directory({char: 'f', description: messages.getMessage('fileFlagDescription')})
   };
 
-  // Comment this out if your command does not require an org username
   protected static requiresUsername = true;
-
-  // Comment this out if your command does not support a hub org username
   protected static supportsDevhubUsername = true;
-
-  // Set this to true if your command requires a project workspace; 'requiresProject' is false by default
   protected static requiresProject = false;
 
   public async run(): Promise<{}> {
-    const { objects, locales, file } = this.flags;
+    this.ux.startSpinner(messages.getMessage('startSpinnerDescription'));
 
+    const { objects, locales, file } = this.flags;
     const conn = this.org.getConnection();
 
     const results = await Promise.all([
@@ -82,19 +70,16 @@ export default class Org extends SfdxCommand {
         let fullName = key.substring(key.indexOf('.') + 1);
         fullName = fullName.substring(0, fullName.lastIndexOf('.'));
         fullName = `${fullName}__c`;
-        let isLookup = key.substring(key.lastIndexOf('.') + 1) === 'RelatedListLabel';
+
+        const field: { fullName, relationshipLabel?, label?, description?} = { fullName };
+        const isLookup = key.substring(key.lastIndexOf('.') + 1) === 'RelatedListLabel';
         if (isLookup) {
-          return {
-            fullName,
-            relationshipLabel: label
-          };
+          if (label) field.relationshipLabel = label;
         } else {
-          return {
-            fullName,
-            label,
-            description
-          };
+          if (label) field.label = label;
         }
+        if (description) field.description = description;
+        return field;
       })
       .reduce((state, field) => {
         if (!state[field.fullName]) {
@@ -143,6 +128,7 @@ export default class Org extends SfdxCommand {
       }, []) as SaveResult[]
     )
     .catch(error => {
+      this.ux.stopSpinner();
       console.log(error);
       throw new SfdxError(error);
     });
@@ -152,6 +138,7 @@ export default class Org extends SfdxCommand {
       failure: results.filter(field => !field.success)
     };
 
+    this.ux.stopSpinner();
     return result;
   }
 

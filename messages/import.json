@@ -1,0 +1,8 @@
+{
+  "commandDescription": "retrieve translations in .xlsx format",
+  "objectsFlagDescription": "a list of sObject API names",
+  "localesFlagDescription": "a list of supported locales",
+  "fileFlagDescription": "the .xlsx file",
+  "errorNoOrgResults": "No results found for the org '%s'.",
+  "startSpinnerDescription": "Importing translations"
+}
