@@ -30,70 +30,20 @@ USAGE
 ```
 <!-- usagestop -->
 <!-- commands -->
-* [`sfdx i18n:object:deploy [-o <array>] [-l <array>] [-f <directory>] [--label] [--description] [--helptext] [--picklist] [-v <string>] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`](#sfdx-i18nobjectdeploy--o-array--l-array--f-directory---label---description---helptext---picklist--v-string--u-string---apiversion-string---json---loglevel-tracedebuginfowarnerrorfataltracedebuginfowarnerrorfatal)
-* [`sfdx i18n:object:retrieve [-o <array>] [-l <array>] [-d <directory>] [--label] [--description] [--helptext] [--picklist] [-v <string>] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`](#sfdx-i18nobjectretrieve--o-array--l-array--d-directory---label---description---helptext---picklist--v-string--u-string---apiversion-string---json---loglevel-tracedebuginfowarnerrorfataltracedebuginfowarnerrorfatal)
+* [`sfdx i18n:object:export [-o <array>] [-l <array>] [-d <directory>] [-v <string>] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`](#sfdx-i18nobjectexport--o-array--l-array--d-directory--v-string--u-string---apiversion-string---json---loglevel-tracedebuginfowarnerrorfataltracedebuginfowarnerrorfatal)
+* [`sfdx i18n:object:import [-o <array>] [-l <array>] [-f <directory>] [-v <string>] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`](#sfdx-i18nobjectimport--o-array--l-array--f-directory--v-string--u-string---apiversion-string---json---loglevel-tracedebuginfowarnerrorfataltracedebuginfowarnerrorfatal)
 
-## `sfdx i18n:object:deploy [-o <array>] [-l <array>] [-f <directory>] [--label] [--description] [--helptext] [--picklist] [-v <string>] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`
-
-retrieve translations in .xlsx format
-
-```
-USAGE
-  $ sfdx i18n:object:deploy [-o <array>] [-l <array>] [-f <directory>] [--label] [--description] [--helptext] 
-  [--picklist] [-v <string>] [-u <string>] [--apiversion <string>] [--json] [--loglevel 
-  trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]
-
-OPTIONS
-  -f, --file=file                                                                   the .xlsx file
-  -l, --locales=locales                                                             a list of supported locales
-  -o, --objects=objects                                                             a list of sObject API names
-
-  -u, --targetusername=targetusername                                               username or alias for the target
-                                                                                    org; overrides default target org
-
-  -v, --targetdevhubusername=targetdevhubusername                                   username or alias for the dev hub
-                                                                                    org; overrides default dev hub org
-
-  --apiversion=apiversion                                                           override the api version used for
-                                                                                    api requests made by this command
-
-  --description                                                                     require .xlsx file to include field
-                                                                                    descriptions
-
-  --helptext                                                                        require .xlsx file to include field
-                                                                                    help texts
-
-  --json                                                                            format output as json
-
-  --label                                                                           require .xlsx file to include field
-                                                                                    labels
-
-  --loglevel=(trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL)  [default: warn] logging level for
-                                                                                    this command invocation
-
-  --picklist                                                                        require .xlsx file to include
-                                                                                    picklist values
-
-EXAMPLES
-  $ sfdx i18n:object:deploy --objects Account,Contact --locales en_US,es_MX
-    
-  $ sfdx i18n:object:deploy --objects Account,Contact --locales en_US,es_MX --label --description --helptext --picklist
-```
-
-_See code: [src/commands/i18n/object/deploy.ts](https://github.com/apexfarm/sfdx-i18n/blob/v0.0.1-alpha.2/src/commands/i18n/object/deploy.ts)_
-
-## `sfdx i18n:object:retrieve [-o <array>] [-l <array>] [-d <directory>] [--label] [--description] [--helptext] [--picklist] [-v <string>] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`
+## `sfdx i18n:object:export [-o <array>] [-l <array>] [-d <directory>] [-v <string>] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`
 
 retrieve translations in .xlsx format
 
 ```
 USAGE
-  $ sfdx i18n:object:retrieve [-o <array>] [-l <array>] [-d <directory>] [--label] [--description] [--helptext] 
-  [--picklist] [-v <string>] [-u <string>] [--apiversion <string>] [--json] [--loglevel 
-  trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]
+  $ sfdx i18n:object:export [-o <array>] [-l <array>] [-d <directory>] [-v <string>] [-u <string>] [--apiversion 
+  <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]
 
 OPTIONS
-  -d, --outputdir=outputdir                                                         a directory to output the .xlsx
+  -d, --directory=directory                                                         a directory to output the .xlsx
                                                                                     files
 
   -l, --locales=locales                                                             a list of supported locales
@@ -109,31 +59,56 @@ OPTIONS
   --apiversion=apiversion                                                           override the api version used for
                                                                                     api requests made by this command
 
-  --description                                                                     require .xlsx file to include field
-                                                                                    descriptions
-
-  --helptext                                                                        require .xlsx file to include field
-                                                                                    help texts
-
   --json                                                                            format output as json
-
-  --label                                                                           require .xlsx file to include field
-                                                                                    labels
 
   --loglevel=(trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL)  [default: warn] logging level for
                                                                                     this command invocation
 
-  --picklist                                                                        require .xlsx file to include
-                                                                                    picklist values
-
 EXAMPLES
-  $ sfdx i18n:object:retrieve --objects Account,Contact --locales en_US,es_MX
+  $ sfdx i18n:object:export --objects Account,Contact --targetusername your.username@email.com
     
-  $ sfdx i18n:object:retrieve --objects Account,Contact --locales en_US,es_MX --label --description --helptext 
-  --picklist
+  $ sfdx i18n:object:export --objects Account,Contact --locales en_US,es_MX --directory ./path/to/folder/ 
+  --targetusername your.username@email.com
 ```
 
-_See code: [src/commands/i18n/object/retrieve.ts](https://github.com/apexfarm/sfdx-i18n/blob/v0.0.1-alpha.2/src/commands/i18n/object/retrieve.ts)_
+_See code: [src/commands/i18n/object/export.ts](https://github.com/apexfarm/sfdx-i18n/blob/v0.0.1-alpha.2/src/commands/i18n/object/export.ts)_
+
+## `sfdx i18n:object:import [-o <array>] [-l <array>] [-f <directory>] [-v <string>] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`
+
+retrieve translations in .xlsx format
+
+```
+USAGE
+  $ sfdx i18n:object:import [-o <array>] [-l <array>] [-f <directory>] [-v <string>] [-u <string>] [--apiversion 
+  <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]
+
+OPTIONS
+  -f, --file=file                                                                   the .xlsx file
+  -l, --locales=locales                                                             a list of supported locales
+  -o, --objects=objects                                                             a list of sObject API names
+
+  -u, --targetusername=targetusername                                               username or alias for the target
+                                                                                    org; overrides default target org
+
+  -v, --targetdevhubusername=targetdevhubusername                                   username or alias for the dev hub
+                                                                                    org; overrides default dev hub org
+
+  --apiversion=apiversion                                                           override the api version used for
+                                                                                    api requests made by this command
+
+  --json                                                                            format output as json
+
+  --loglevel=(trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL)  [default: warn] logging level for
+                                                                                    this command invocation
+
+EXAMPLES
+  $ sfdx i18n:object:import --file ./path/to/i18n.xlsx --targetusername your@email.com
+    
+  $ sfdx i18n:object:import --objects Account,Contact --locales en_US,es_MX --file ./path/to/i18n.xlsx --targetusername 
+  your@email.com
+```
+
+_See code: [src/commands/i18n/object/import.ts](https://github.com/apexfarm/sfdx-i18n/blob/v0.0.1-alpha.2/src/commands/i18n/object/import.ts)_
 <!-- commandsstop -->
 <!-- debugging-your-plugin -->
 # Debugging your plugin

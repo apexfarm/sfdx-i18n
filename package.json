@@ -1,7 +1,7 @@
 {
   "name": "sfdx-i18n",
   "description": "Export translations into excel files with opinionated format",
-  "version": "0.0.1-alpha.2",
+  "version": "0.0.1-alpha.3",
   "author": "Jeff Jin",
   "bugs": "https://github.com/apexfarm/sfdx-i18n/issues",
   "dependencies": {
