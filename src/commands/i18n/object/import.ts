@@ -2,6 +2,8 @@ import { flags, SfdxCommand, SfdxResult } from '@salesforce/command';
 import { Messages, SfdxError, Connection } from '@salesforce/core';
 import { SaveResult } from 'jsforce';
 import * as XLSX from 'xlsx';
+import { AnyJson } from '@salesforce/ts-types';
+import { CustomFieldMetadataInfo } from '../../../common/types';
 
 Messages.importMessagesDirectory(__dirname);
 const messages = Messages.loadMessages('sfdx-i18n', 'import');
@@ -13,7 +15,7 @@ export default class Org extends SfdxCommand {
   public static examples = [
     `$ sfdx i18n:object:import --file ./path/to/i18n.xlsx --targetusername your@email.com
     `,
-    `$ sfdx i18n:object:import --objects Account,Contact --locales en_US,es_MX --file ./path/to/i18n.xlsx --targetusername your@email.com
+    `$ sfdx i18n:object:import --file ./path/to/i18n.xlsx --targetusername your@email.com --objects Account,Contact --locales en_US,es_MX
     `
   ];
 
@@ -28,8 +30,8 @@ export default class Org extends SfdxCommand {
     },
     display() {
       const { failure, success } = this.data as { failure, success };
-      if (Array.isArray(failure) && failure.length) {
-        this.ux.log('\n');
+      if (failure.length) {
+        this.ux.log(`\nFailed to import ${failure.length} fields:\n`);
         this.ux.table(failure.map(({fullName, errors}) => ({
           fullName,
           message: Array.isArray(errors)
@@ -40,9 +42,9 @@ export default class Org extends SfdxCommand {
             : `${errors.statusCode}: ${errors.message}`
         })), this.tableColumnData);
       }
-      this.ux.log(`\nSuccessfully imported ${success} fields.\n`);
+      this.ux.log(`\nSuccessfully imported ${success.length} fields.\n`);
     }
-};
+  };
 
   protected static flagsConfig = {
     objects: flags.array({char: 'o', description: messages.getMessage('objectsFlagDescription')}),
@@ -57,28 +59,119 @@ export default class Org extends SfdxCommand {
   public async run(): Promise<{}> {
     this.ux.startSpinner(messages.getMessage('startSpinnerDescription'));
 
-    const { objects, locales, file } = this.flags;
     const conn = this.org.getConnection();
+    const wb = XLSX.readFile(this.flags.file);
 
-    const results = await Promise.all([
-      this.readObjectTranslations(conn, locales)
-    ])
-    .then(([sfLocales]) => this.readExcel(file, objects, locales))
-    .then(sheets => sheets.map(({name, rows}) => rows
-      .filter(({key}) => key.startsWith('CustomField'))
-      .map(({key, label, description}) => {
+    const locales = await this.verifyLocales(conn, this.flags.locales);
+    const objects = await this.verifyObjects(conn, this.flags.objects, wb);
+    const sheets = this.parseExcel(wb, objects, locales);
+    const fields: CustomFieldMetadataInfo[] = this.parseFields(sheets);
+
+    const results = await this.importFields(conn, fields);
+    await this.rerunFailedImports(conn, fields, results);
+
+    const result = {
+      success: results.filter(field => field.success),
+      failure: results.filter(field => !field.success)
+    };
+
+    this.ux.stopSpinner();
+    return result;
+  }
+
+  private async rerunFailedImports(conn: Connection, fields: CustomFieldMetadataInfo[], results: SaveResult[]) {
+    const unknownExceptions = this.findUnknownExceptions(results);
+    const rerunMap = unknownExceptions.reduce((state, result) => {
+      state[result.fullName] = true;
+      return state;
+    }, {});
+
+    if (unknownExceptions.length) {
+      const rerunResults = await this.importFields(conn, fields.filter(field => rerunMap[field.fullName]) as []);
+      const rerunSuccessResultMap = rerunResults
+        .filter(result => result.success)
+        .reduce((state, result) => {
+          state[result.fullName] = result;
+          return state;
+        }, {});
+
+      if (Object.keys(rerunSuccessResultMap).length) {
+        results.map(result => result)
+          .forEach((result, index) => {
+            if (rerunSuccessResultMap[result.fullName]) {
+              results[index] = rerunSuccessResultMap[result.fullName];
+            }
+          });
+      }
+    }
+  }
+
+  private findUnknownExceptions(results: SaveResult[]) {
+    return results
+      .filter(({ success }) => !success)
+      .filter((result: unknown) => {
+        const errors = (result as {errors}).errors;
+        return Array.isArray(errors)
+          ? errors.find(error => error.statusCode === 'UNKNOWN_EXCEPTION')
+          : errors.statusCode === 'UNKNOWN_EXCEPTION';
+      });
+  }
+
+  private async importFields(conn: Connection, fields: CustomFieldMetadataInfo[]) {
+    return await Promise.resolve(fields.reduce((state, field, index) => {
+      if (index % 10 === 0) {
+        state.push([]);
+      }
+      state[state.length - 1].push(field);
+      return state;
+    }, []))
+      .then(each10fields => Promise.all(each10fields.map(each10field => Promise.all([each10field, conn.metadata.read('CustomField', each10field.map(({ fullName }) => fullName))]))))
+      .then(each10fields => Promise.all(each10fields.map(([each10field, customFields]) => {
+        const each10fieldMap = each10field.reduce((state, field) => {
+          state[field.fullName] = field;
+          return state;
+        }, {});
+        if (!Array.isArray(customFields)) {
+          customFields = [customFields];
+        }
+        const updatedCustomFields = customFields.map(field => {
+          return { ...field, ...each10fieldMap[field.fullName] };
+        });
+        return conn.metadata.update('CustomField', updatedCustomFields);
+        // return updatedCustomFields;
+      })))
+      .then(each10results => each10results
+        .reduce((state: SaveResult[], each10result): SaveResult[] => {
+          if (!Array.isArray(each10result)) {
+            each10result = [each10result];
+          }
+          return state.concat(each10result as SaveResult[]);
+        }, []) as SaveResult[])
+      .catch(error => {
+        this.ux.stopSpinner();
+        console.log(error);
+        throw new SfdxError(error);
+      });
+  }
+
+  private parseFields(sheets: [{name, rows}]) {
+    const fields = sheets.map(({ rows }) => rows
+      .filter(({ key }) => key.startsWith('CustomField'))
+      .map(({ key, label, description }) => {
         let fullName = key.substring(key.indexOf('.') + 1);
         fullName = fullName.substring(0, fullName.lastIndexOf('.'));
         fullName = `${fullName}__c`;
+        const field: CustomFieldMetadataInfo = { fullName };
 
-        const field: { fullName, relationshipLabel?, label?, description?} = { fullName };
-        const isLookup = key.substring(key.lastIndexOf('.') + 1) === 'RelatedListLabel';
-        if (isLookup) {
-          if (label) field.relationshipLabel = label;
-        } else {
-          if (label) field.label = label;
+        switch (key.substring(key.lastIndexOf('.') + 1)) {
+          case 'RelatedListLabel':
+            if (label) field.relationshipLabel = label;
+            break;
+          case 'FieldLabel':
+            if (label) field.label = label;
+            if (description) field.description = description;
+            break;
         }
-        if (description) field.description = description;
         return field;
       })
       .reduce((state, field) => {
@@ -88,72 +181,36 @@ export default class Org extends SfdxCommand {
           state[field.fullName] = { ...state[field.fullName], ...field };
         }
         return state;
-      }, {})
-    ))
-    .then(fieldsByObject => fieldsByObject.reduce((state: [], fields: {}) => state.concat(Object.values(fields)), []))
-    .then((fields: []) => {
-      const each10fields = fields.reduce((state, field, index) => {
-        if (index % 10 === 0) {
-          state.push([]);
-        }
-        state[state.length - 1].push(field);
-        return state;
-      }, []);
-      return each10fields;
-    })
-    .then(each10fields => Promise.all(each10fields.map(each10field =>
-      Promise.all([each10field, conn.metadata.read('CustomField', each10field.map(({fullName}) => fullName))])
-    )))
-    .then(each10fields => Promise.all(each10fields.map(([each10field, customFields]) => {
-      let each10fieldMap = each10field.reduce((state, field) => {
-        state[field.fullName] = field;
-        return state;
-      }, {});
-
-      if (!Array.isArray(customFields)) {
-        customFields = [customFields];
-      }
-
-      const updatedCustomFields = customFields.map(field => {
-        return { ...field, ...each10fieldMap[field.fullName] };
-      });
-      return conn.metadata.update('CustomField', updatedCustomFields);
-    })))
-    .then(each10results => each10results
-      .reduce((state: SaveResult[], each10result): SaveResult[] => {
-        if (!Array.isArray(each10result)) {
-          each10result = [each10result];
-        }
-        return state.concat(each10result as SaveResult[]);
-      }, []) as SaveResult[]
-    )
-    .catch(error => {
-      this.ux.stopSpinner();
-      console.log(error);
-      throw new SfdxError(error);
-    });
-
-    const result = {
-      success: results.filter(field => field.success).length,
-      failure: results.filter(field => !field.success)
-    };
-
-    this.ux.stopSpinner();
-    return result;
+      }, {}))
+      .reduce((state: [], fieldMap: {}) => state.concat(Object.values(fieldMap)), []);
+    return fields;
   }
 
-  private readExcel(file, objects, locales) {
-    const wb = XLSX.readFile(file);
+  private parseExcel(wb, objects, locales) {
     return objects
       .map(object => [object, wb.Sheets[object]])
-      .filter(([name, ws]) => !!ws)
+      .filter(([ws]) => !!ws)
       .map(([name, ws]) => {
-        const rows = XLSX.utils.sheet_to_json(ws);
+        const rows = XLSX.utils.sheet_to_json(ws).map(({key, label, description, ...translation}) => {
+          const row: AnyJson = { key, label };
+          if (description) row.description = description;
+          locales.forEach(locale => {
+            if (translation[locale]) row[locale] = translation[locale];
+          });
+          return row;
+        });
         return { name, rows };
       });
   }
 
-  private async readObjectTranslations(conn: Connection, locales: string[]) {
+  private async verifyObjects(conn: Connection, objects: string[], wb: XLSX.WorkBook) {
+    if (!objects) {
+      objects = wb.SheetNames.map(sheetName => sheetName);
+    }
+    return objects;
+  }
+
+  private async verifyLocales(conn: Connection, locales: string[]) {
     return conn.metadata.list([{type: 'Translations', folder: null}], '46.0')
       .then(translations => {
         if (!Array.isArray(translations)) {

@@ -22,7 +22,7 @@ $ npm install -g sfdx-i18n
 $ sfdx COMMAND
 running command...
 $ sfdx (-v|--version|version)
-sfdx-i18n/0.0.1-alpha.2 darwin-x64 node-v12.4.0
+sfdx-i18n/0.0.1-alpha.3 darwin-x64 node-v12.4.0
 $ sfdx --help [COMMAND]
 USAGE
   $ sfdx COMMAND
@@ -71,7 +71,7 @@ EXAMPLES
   --targetusername your.username@email.com
 ```
 
-_See code: [src/commands/i18n/object/export.ts](https://github.com/apexfarm/sfdx-i18n/blob/v0.0.1-alpha.2/src/commands/i18n/object/export.ts)_
+_See code: [src/commands/i18n/object/export.ts](https://github.com/apexfarm/sfdx-i18n/blob/v0.0.1-alpha.3/src/commands/i18n/object/export.ts)_
 
 ## `sfdx i18n:object:import [-o <array>] [-l <array>] [-f <directory>] [-v <string>] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`
 
@@ -108,7 +108,7 @@ EXAMPLES
   your@email.com
 ```
 
-_See code: [src/commands/i18n/object/import.ts](https://github.com/apexfarm/sfdx-i18n/blob/v0.0.1-alpha.2/src/commands/i18n/object/import.ts)_
+_See code: [src/commands/i18n/object/import.ts](https://github.com/apexfarm/sfdx-i18n/blob/v0.0.1-alpha.3/src/commands/i18n/object/import.ts)_
 <!-- commandsstop -->
 <!-- debugging-your-plugin -->
 # Debugging your plugin
